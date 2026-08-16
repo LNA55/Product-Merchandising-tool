@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ALL_VARIANTS, BLOCKS, BLOCK_GROUPS, DOOR_OPTIONS, DOOR_TAGLINE, GROUPS, type Block, type Source } from '../data'
+import { ALL_VARIANTS, BLOCKS, BLOCK_GROUPS, DOOR_OPTIONS, DOOR_TAGLINE, FINAL_USER_GROUPS, GROUPS, liveAudienceLines, type Block, type Source } from '../data'
 import { useStore } from '../store'
 import { Badge, Button, Field, inputCls, Modal, SessionWord } from '../components/ui'
 
@@ -8,23 +8,12 @@ function SaveModal({ block, onClose }: { block: Block; onClose: () => void }) {
   const { nextDraftNum, saveDraft } = useStore()
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
-  const [savedId, setSavedId] = useState<string | null>(null)
   const num = nextDraftNum(block.id)
 
-  if (savedId) {
-    return (
-      <Modal title={`${savedId} saved`} subtitle="This release is now immutable. Any further modification of this block will create a new release." onClose={onClose}>
-        <div className="flex justify-end gap-2">
-          <Link to="/versions" className="self-center text-sm text-cyan-700 underline underline-offset-2">View in Release History</Link>
-          <Button variant="primary" onClick={onClose}>Done</Button>
-        </div>
-      </Modal>
-    )
-  }
   return (
     <Modal
       title={`Save ${block.code} as new release`}
-      subtitle={`Saves the current weights of “${block.name}” only. Releases are immutable — the release ID is a unique, system-generated identifier.`}
+      subtitle={`Saves the current weights of “${block.name}” only.`}
       onClose={onClose}
     >
       <Field label="Release ID (system generated)">
@@ -38,13 +27,16 @@ function SaveModal({ block, onClose }: { block: Block; onClose: () => void }) {
       </Field>
       <div className="mt-4 flex justify-end gap-2">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => setSavedId(saveDraft(block.id, name, desc))}>Save {block.code}_{num}</Button>
+        <Button variant="primary" onClick={() => { saveDraft(block.id, name, desc); onClose() }}>Save {block.code}_{num}</Button>
       </div>
+      <p className="mt-3 text-[11.5px] leading-snug text-stone-400">
+        Once saved, the release {block.code}_{num} is immutable — the release ID is a unique, system-generated identifier, and any further modification of this block will create a new release.
+      </p>
     </Modal>
   )
 }
 
-function PublishModal({ block, onClose }: { block: Block; onClose: () => void }) {
+function PublishModal({ block, audience, onClose }: { block: Block; audience?: string; onClose: () => void }) {
   const { latestDraftOf, liveOf, nextPublishNum, publishLive } = useStore()
   const [note, setNote] = useState('')
   const [publishedId, setPublishedId] = useState<string | null>(null)
@@ -68,13 +60,14 @@ function PublishModal({ block, onClose }: { block: Block; onClose: () => void })
         <div className="flex justify-between px-3.5 py-2"><dt className="text-stone-500">Publishing draft</dt><dd className="font-semibold">{draft?.id ?? '—'}</dd></div>
         <div className="flex justify-between px-3.5 py-2"><dt className="text-stone-500">Will generate</dt><dd className="font-semibold text-cyan-700">{block.code}_{num}</dd></div>
         <div className="flex justify-between px-3.5 py-2"><dt className="text-stone-500">Current live (replaced)</dt><dd className="font-semibold">{live?.id ?? '—'}</dd></div>
+        <div className="flex justify-between gap-6 px-3.5 py-2"><dt className="shrink-0 text-stone-500">Will be shown to</dt><dd className="text-right font-semibold text-cyan-800">{audience ?? 'All visitors'}</dd></div>
       </dl>
       <Field label="Publication note (optional)">
         <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Rolled out after merchandising review" />
       </Field>
       <div className="mt-4 flex justify-end gap-2">
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={() => setPublishedId(publishLive(block.id, note))}>Publish {block.code}_{num} live</Button>
+        <Button variant="primary" onClick={() => setPublishedId(publishLive(block.id, note, audience))}>Publish {block.code}_{num} live</Button>
       </div>
     </Modal>
   )
@@ -104,12 +97,236 @@ function PublishIcon() {
   )
 }
 
+/** ColumnCard — the header card of one Merch Block column in the Merchandising Mix matrix.
+    Clean fixed-slot layout so every row aligns across columns:
+    head (name + code) · divider · mode body · footer (actions + status remark).
+    - "live":         live versions per final user group; the FRAMED tag is the one
+                      whose weights are displayed in the column below (click to switch)
+    - "latest-saved": pending draft + Show to + Publish (enabled only if a draft is pending)
+    - "working":      Show to + Save/Publish (enabled only once an edit created an unsaved draft)
+    Renders a compact variant (code + mode-relevant icon CTAs) in compact view. */
+function ColumnCard({ b, compact, onSave, onPublish, liveSelection, onSelectLive }: {
+  b: Block
+  compact: boolean
+  onSave: () => void
+  onPublish: (audience: string) => void
+  liveSelection?: string
+  onSelectLive: (releaseId: string) => void
+}) {
+  const { dirtyOf, liveOf, nextDraftNum, releasesOf, pendingDraftOf, displayMode, labelOf } = useStore()
+  const [showToOpen, setShowToOpen] = useState(false)
+  const [showTo, setShowTo] = useState<Set<string>>(new Set(FINAL_USER_GROUPS.map((g) => g.name)))
+  const dirty = dirtyOf(b.id)
+  const live = liveOf(b.id)
+  const pendingDraft = pendingDraftOf(b.id)
+
+  const allSelected = showTo.size === FINAL_USER_GROUPS.length
+  const showToSummary = allSelected ? 'All visitors' : showTo.size === 0 ? 'Nobody — hidden' : `${showTo.size} group${showTo.size > 1 ? 's' : ''}`
+  const audienceLabel = allSelected
+    ? 'All visitors'
+    : showTo.size === 0
+      ? 'Nobody — hidden'
+      : FINAL_USER_GROUPS.filter((g) => showTo.has(g.name)).map((g) => g.name).join(' · ')
+  function toggleShowTo(name: string) {
+    setShowTo((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  /* ---- compact variant ---- */
+  if (compact) {
+    const pubDisabled = displayMode === 'latest-saved' ? !pendingDraft : dirty === 0
+    const saveDisabled = dirty === 0
+    return (
+      <th className="sticky top-0 z-30 min-w-[84px] max-w-[96px] border-b border-stone-200/80 bg-white px-1 py-1.5 align-bottom font-normal">
+        <div className="flex flex-col items-center gap-1 rounded-xl border border-stone-200/80 bg-white px-1.5 py-2 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_6px_16px_-8px_rgba(28,25,23,0.12)]">
+          <span className="text-center font-mono text-[10.5px] font-bold leading-tight tracking-wider text-cyan-600" title={`${b.name} — live ${live?.num ?? '—'}${dirty ? ` · ${dirty} unsaved change(s)` : ''}`}>{b.code}</span>
+          {displayMode !== 'live' && (
+            <span className="flex items-center gap-1">
+              {displayMode === 'working' && (
+                <button type="button" onClick={saveDisabled ? undefined : onSave} disabled={saveDisabled}
+                  title={saveDisabled ? 'No unsaved draft — edit a weight to enable' : `Save ${b.code}_${nextDraftNum(b.id)}`}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${saveDisabled ? 'cursor-not-allowed border border-stone-200 text-stone-300' : 'border border-stone-300 text-stone-500 hover:border-cyan-600 hover:text-cyan-700'}`}>
+                  <SaveIcon />
+                </button>
+              )}
+              <button type="button" onClick={pubDisabled ? undefined : () => onPublish(audienceLabel)} disabled={pubDisabled}
+                title={pubDisabled ? (displayMode === 'latest-saved' ? 'No saved draft' : 'No unsaved draft — edit a weight to enable') : `Publish ${b.code} live`}
+                className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${pubDisabled ? 'cursor-not-allowed bg-stone-200 text-stone-400' : 'bg-cyan-700 text-white hover:bg-cyan-600'}`}>
+                <PublishIcon />
+              </button>
+            </span>
+          )}
+        </div>
+      </th>
+    )
+  }
+
+  /* ---- full view — shared skeleton ---- */
+  const head = (
+    <>
+      <span className="flex h-[38px] items-end justify-center">
+        <Link to="/merch-blocks" className="line-clamp-2 text-center text-[12.5px] font-semibold leading-tight text-stone-800 hover:text-cyan-700">
+          {labelOf(b.id)}
+        </Link>
+      </span>
+      <span className="mt-1 block text-center font-mono text-[10px] font-bold tracking-wider text-cyan-600">{b.code}</span>
+      <span className="block h-4" />
+    </>
+  )
+  const label = (t: string) => (
+    <span className="block text-[8.5px] font-bold uppercase tracking-wide text-stone-400">{t}</span>
+  )
+  const showToUI = (
+    <span className="relative block text-left">
+      {label('Show to')}
+      <button
+        type="button"
+        onClick={() => setShowToOpen(!showToOpen)}
+        title="Choose which final user groups this version of the mix is shown to"
+        className="mt-0.5 flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-1.5 py-1 text-[10.5px] font-medium text-stone-700 hover:border-cyan-600"
+      >
+        <span className={showTo.size === 0 ? 'text-amber-600' : ''}>{showToSummary}</span>
+        <span className={`text-[8px] text-stone-400 transition-transform ${showToOpen ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+      {showToOpen && (
+        <span className="absolute top-full left-0 z-50 mt-1 block w-[176px] rounded-xl border border-stone-200 bg-white p-1.5 text-left shadow-xl">
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10.5px] font-semibold text-stone-700 hover:bg-cyan-50">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => setShowTo(allSelected ? new Set() : new Set(FINAL_USER_GROUPS.map((g) => g.name)))}
+              className="h-3 w-3 accent-cyan-700"
+            />
+            All visitors
+          </label>
+          <span className="my-1 block border-t border-stone-100" />
+          {FINAL_USER_GROUPS.map((g) => (
+            <label key={g.name} className="flex cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1 text-[10.5px] text-stone-600 hover:bg-cyan-50">
+              <input
+                type="checkbox"
+                checked={showTo.has(g.name)}
+                onChange={() => toggleShowTo(g.name)}
+                className="h-3 w-3 accent-cyan-700"
+              />
+              {g.name}
+            </label>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+  const thCls = 'sticky top-[84px] z-30 min-w-[150px] max-w-[166px] border-b border-stone-200/80 bg-white px-1.5 pb-2.5 align-bottom font-normal'
+  const cardCls = 'flex h-[260px] flex-col rounded-2xl border border-stone-200/80 bg-white px-2.5 pt-3 pb-3 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_6px_16px_-8px_rgba(28,25,23,0.12)]'
+  const btnPrimary = (enabled: boolean) =>
+    `w-full rounded-full px-3 py-1.5 text-[11.5px] font-bold transition-colors ${enabled ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'cursor-not-allowed bg-stone-200 text-stone-400'}`
+  const btnSecondary = (enabled: boolean) =>
+    `w-full rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors ${enabled ? 'border border-stone-300 text-stone-600 hover:border-cyan-600 hover:text-cyan-700' : 'cursor-not-allowed border border-stone-200 text-stone-300'}`
+  const remark = (active: boolean, activeText: string, idleText: string) => (
+    <span className={`mt-1.5 block text-center text-[10px] ${active ? 'font-semibold text-amber-600' : 'text-stone-300'}`}>
+      {active ? activeText : idleText}
+    </span>
+  )
+
+  /* ---- live mode ---- */
+  if (displayMode === 'live') {
+    const liveLines = liveAudienceLines(releasesOf(b.id))
+    const effectiveLive = liveSelection && liveLines.some((l) => l.r.id === liveSelection) ? liveSelection : live?.id
+    return (
+      <th className={thCls}>
+        <div className={cardCls}>
+          {head}
+          {liveLines.length === 0 && (
+            <span className="mt-1 block text-left text-[10px] text-stone-300">nothing live yet</span>
+          )}
+          {liveLines.map(({ r, groups }) => (
+            <span key={r.id} className="mt-2 block text-left">
+              <button
+                type="button"
+                onClick={() => onSelectLive(r.id)}
+                title={effectiveLive === r.id
+                  ? 'This version is displayed in the column below'
+                  : 'Click to display this version in the column below'}
+                className={`inline-block rounded-full bg-cyan-50 px-1.5 py-px font-mono text-[9px] font-semibold text-cyan-800 transition-shadow ${effectiveLive === r.id ? 'ring-1 ring-cyan-600 ring-offset-1' : 'hover:ring-1 hover:ring-cyan-200'}`}
+              >
+                live {r.num}
+              </button>
+              <span className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-stone-400" title={`seen by ${groups}`}>seen by {groups}</span>
+            </span>
+          ))}
+          <span className="mt-auto block text-center text-[9px] text-stone-300">read-only view</span>
+        </div>
+      </th>
+    )
+  }
+
+  /* ---- latest-saved mode ---- */
+  if (displayMode === 'latest-saved') {
+    return (
+      <th className={thCls}>
+        <div className={cardCls}>
+          {head}
+          <span className="block text-left">
+            {label('Version')}
+            <span className="mt-0.5 block">
+              {pendingDraft ? (
+                <span className="inline-block rounded-full bg-amber-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-800" title={`Latest saved draft — ${pendingDraft.date} · ${pendingDraft.name}`}>
+                  {pendingDraft.num} · draft
+                </span>
+              ) : (
+                <span className="inline-block rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-400">no saved draft</span>
+              )}
+            </span>
+          </span>
+          <span className="mt-2.5 block">{showToUI}</span>
+          <span className="mt-auto flex flex-col items-stretch pt-3">
+            <button type="button" onClick={pendingDraft ? () => onPublish(audienceLabel) : undefined} disabled={!pendingDraft}
+              title={pendingDraft ? `Publish ${b.code} live` : 'No saved draft to publish'}
+              className={btnPrimary(!!pendingDraft)}>
+              Publish
+            </button>
+            {remark(!!pendingDraft, 'pending publication', 'up to date with live')}
+          </span>
+        </div>
+      </th>
+    )
+  }
+
+  /* ---- working mode ---- */
+  const hasUnsaved = dirty > 0
+  return (
+    <th className={thCls}>
+      <div className={cardCls}>
+        {head}
+        <span className="block">{showToUI}</span>
+        <span className="mt-auto flex flex-col items-stretch gap-1.5 pt-3">
+          <button type="button" onClick={hasUnsaved ? onSave : undefined} disabled={!hasUnsaved}
+            title={hasUnsaved ? `Save ${b.code}_${nextDraftNum(b.id)}` : 'No unsaved draft — edit a weight in this column to enable'}
+            className={btnPrimary(hasUnsaved)}>
+            Save
+          </button>
+          <button type="button" onClick={hasUnsaved ? () => onPublish(audienceLabel) : undefined} disabled={!hasUnsaved}
+            title={hasUnsaved ? `Publish ${b.code} live` : 'No unsaved draft — edit a weight in this column to enable'}
+            className={btnSecondary(hasUnsaved)}>
+            Publish
+          </button>
+          {remark(hasUnsaved, 'one unsaved draft', 'no unsaved draft')}
+        </span>
+      </div>
+    </th>
+  )
+}
+
 function BulkPublishModal({ pending, onClose }: {
   pending: { block: Block; draftId: string; nextId: string }[]
   onClose: () => void
 }) {
   const { publishLive } = useStore()
   const [done, setDone] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
 
   if (done) {
     return (
@@ -132,10 +349,16 @@ function BulkPublishModal({ pending, onClose }: {
           ))}
         </ul>
       )}
+      {pending.length > 0 && (
+        <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900">
+          <input type="checkbox" checked={confirmed} onChange={() => setConfirmed(!confirmed)} className="mt-0.5 h-3.5 w-3.5 accent-cyan-700" />
+          <span>I confirm the publication of <b>{pending.length} block{pending.length > 1 ? 's' : ''} to production</b> — this replaces what customers currently see on the site.</span>
+        </label>
+      )}
       <div className="mt-4 flex justify-end gap-2">
         <Button onClick={onClose}>Cancel</Button>
         {pending.length > 0 && (
-          <Button variant="primary" onClick={() => { pending.forEach((p) => publishLive(p.block.id, 'Bulk publish — all latest saved drafts')); setDone(true) }}>
+          <Button variant="primary" disabled={!confirmed} onClick={() => { pending.forEach((p) => publishLive(p.block.id, 'Bulk publish — all latest saved drafts')); setDone(true) }}>
             Publish {pending.length} block{pending.length > 1 ? 's' : ''} live
           </Button>
         )}
@@ -145,11 +368,30 @@ function BulkPublishModal({ pending, onClose }: {
 }
 
 export function MixPage() {
-  const { weights, setWeight, dirtyOf, liveOf, nextDraftNum, nextPublishNum, releases, releasesOf, compact } = useStore()
+  const { weights, setWeight, dirtyOf, liveOf, nextDraftNum, nextPublishNum, releases, releasesOf, pendingDraftOf, releaseWeights, compact, displayMode, setDisplayMode } = useStore()
   const [saveFor, setSaveFor] = useState<Block | null>(null)
-  const [publishFor, setPublishFor] = useState<Block | null>(null)
+  const [publishFor, setPublishFor] = useState<{ block: Block; audience?: string } | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showBulk, setShowBulk] = useState(false)
+  const [userGroup, setUserGroup] = useState('__default__')
+  /* which live release is displayed per block (live mode) — framed tag in the ColumnCard */
+  const [liveSelections, setLiveSelections] = useState<Record<string, string>>({})
+
+  /* the weights the matrix displays, resolved per Display mode:
+     working → the editable working weights; latest-saved → each block's pending draft
+     (or its live release when up to date); live → the framed live release per block */
+  const displayedWeights = useMemo(() => {
+    if (displayMode === 'working') return weights
+    const out: Record<string, number> = { ...weights }
+    for (const b of BLOCKS) {
+      const r = displayMode === 'latest-saved'
+        ? pendingDraftOf(b.id) ?? liveOf(b.id)
+        : (liveSelections[b.id] ? releasesOf(b.id).find((x) => x.id === liveSelections[b.id]) : undefined) ?? liveOf(b.id)
+      if (r) Object.assign(out, releaseWeights(r))
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weights, displayMode, liveSelections, releases])
 
   const lastRelease = [...releases].filter((r) => r.status !== 'draft').sort((a, z) => z.sort - a.sort)[0]
   const pending = BLOCKS.flatMap((b) => {
@@ -174,24 +416,25 @@ export function MixPage() {
   const colTotals = useMemo(() => {
     const t: Record<string, number> = {}
     for (const b of BLOCKS) {
-      t[b.id] = ALL_VARIANTS.reduce((acc, v) => acc + (weights[`${v.id}|${b.id}`] ?? 0), 0)
+      t[b.id] = ALL_VARIANTS.reduce((acc, v) => acc + (displayedWeights[`${v.id}|${b.id}`] ?? 0), 0)
     }
     return t
-  }, [weights])
+  }, [displayedWeights])
 
   const blockGroupSpans = BLOCK_GROUPS.map((g) => ({ g, span: BLOCKS.filter((b) => b.group === g).length }))
   const orderedBlocks: Block[] = BLOCK_GROUPS.flatMap((g) => BLOCKS.filter((b) => b.group === g))
 
   return (
-    <div className="px-8 py-8">
-      <div className={compact ? 'mb-3' : 'mb-6'}>
-        <h1 className="text-[26px] font-bold tracking-tight text-stone-900">Merchandising Mix</h1>
-        {!compact && (
+    <div className={`px-8 ${compact ? 'py-4' : 'py-8'}`}>
+      {/* in compact view the page title moves into the app header to save vertical space */}
+      {!compact && (
+        <div className="mb-6">
+          <h1 className="text-[26px] font-bold tracking-tight text-stone-900">Merchandising Mix</h1>
           <p className="mt-1 text-sm text-stone-500">
             Control how product signals influence merchandising across the commerce experience. In this version, <b className="text-stone-700">each Merch Block is saved and published independently</b> — use the actions in each column header. Expand a data source (▸) to weight each parameterised API call separately.
           </p>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="soft-card max-h-[76vh] overflow-auto">
         <table className="border-separate border-spacing-0 text-[13px]">
@@ -201,6 +444,30 @@ export function MixPage() {
                 <th className="sticky top-0 left-0 z-40 w-[320px] min-w-[320px] max-w-[320px] bg-white px-4 pt-3 pb-3 text-left align-top font-normal" rowSpan={3}>
                   <div className="flex h-full min-h-[250px] flex-col justify-between gap-3">
                     <div className="rounded-2xl border border-stone-200/80 bg-stone-50/60 px-3.5 py-3">
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-stone-400">Display</div>
+                      <select
+                        value={displayMode}
+                        onChange={(e) => setDisplayMode(e.target.value as 'live' | 'latest-saved' | 'working')}
+                        title="Which state of the mixes the matrix displays — drives the column cards and cell editability"
+                        className="mt-0.5 mb-2.5 w-full rounded-xl border border-stone-300 bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-stone-800 focus:border-cyan-600 focus:outline-none"
+                      >
+                        <option value="live">Live mix — in production</option>
+                        <option value="latest-saved">Latest saved mixes — not published</option>
+                        <option value="working">Working view — unsaved changes</option>
+                      </select>
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-stone-400">Final user group</div>
+                      <select
+                        value={userGroup}
+                        onChange={(e) => setUserGroup(e.target.value)}
+                        title="Displays the mix of a specific final user group (defined in Preferences) — not wired yet, the full behaviour is being specified"
+                        className="mt-0.5 mb-2.5 w-full rounded-xl border border-stone-300 bg-white px-2.5 py-1.5 text-[12.5px] font-medium text-stone-800 focus:border-cyan-600 focus:outline-none"
+                      >
+                        <option value="__default__">Default — working view</option>
+                        <option value="__all__">All visitors</option>
+                        {FINAL_USER_GROUPS.map((g) => (
+                          <option key={g.name} value={g.name}>{g.name}</option>
+                        ))}
+                      </select>
                       <div className="text-[10.5px] font-semibold uppercase tracking-wide text-stone-400">Last parameter-set release</div>
                       <div className="mt-0.5 text-[13px] font-semibold text-stone-800">
                         {lastRelease?.date}
@@ -242,62 +509,15 @@ export function MixPage() {
             )}
             <tr>
               {compact && <th className="sticky top-0 left-0 z-40 w-[320px] min-w-[320px] max-w-[320px] border-b border-stone-200/80 bg-white" />}
-              {orderedBlocks.map((b) => {
-                const dirty = dirtyOf(b.id)
-                const live = liveOf(b.id)
-                if (compact) {
-                  return (
-                    <th key={b.id} className="sticky top-0 z-30 min-w-[84px] max-w-[96px] border-b border-stone-200/80 bg-white px-1 py-1.5 align-bottom font-normal">
-                      <div className="flex flex-col items-center gap-1 rounded-xl border border-stone-200/80 bg-white px-1.5 py-2 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_6px_16px_-8px_rgba(28,25,23,0.12)]">
-                        <span className="text-center font-mono text-[10.5px] font-bold leading-tight tracking-wider text-cyan-600" title={`${b.name} — live ${live?.num ?? '—'}${dirty ? ` · ${dirty} unsaved change(s)` : ''}`}>{b.code}</span>
-                        <span className="flex items-center gap-1">
-                          <button type="button" onClick={() => setSaveFor(b)} title={`Save ${b.code}_${nextDraftNum(b.id)}`}
-                            className="flex h-6 w-6 items-center justify-center rounded-full border border-stone-300 text-stone-500 transition-colors hover:border-cyan-600 hover:text-cyan-700">
-                            <SaveIcon />
-                          </button>
-                          <button type="button" onClick={() => setPublishFor(b)} title={`Publish ${b.code} live`}
-                            className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-700 text-white transition-colors hover:bg-cyan-600">
-                            <PublishIcon />
-                          </button>
-                        </span>
-                      </div>
-                    </th>
-                  )
-                }
-                return (
-                  <th key={b.id} className="sticky top-[84px] z-30 min-w-[142px] max-w-[158px] border-b border-stone-200/80 bg-white px-1.5 pb-2.5 align-bottom font-normal">
-                    <div className="flex h-[192px] flex-col justify-end rounded-2xl border border-stone-200/80 bg-white px-2.5 pt-3.5 pb-3 text-center shadow-[0_1px_2px_rgba(28,25,23,0.04),0_6px_16px_-8px_rgba(28,25,23,0.12)]">
-                      <Link to="/merch-blocks" className="block text-[13px] font-semibold leading-snug text-stone-800 hover:text-cyan-700">
-                        {b.name.replace('Merch Block — ', '— ').replace(' Merch Block', '')}
-                      </Link>
-                      <span className="mt-1.5 flex flex-col items-center gap-1">
-                        <span className="font-mono text-[10.5px] font-bold tracking-wider text-cyan-600">{b.code}</span>
-                        <span className="inline-block rounded-full bg-cyan-50 px-2 py-0.5 text-[10.5px] font-semibold text-cyan-800" title="Current live release of this block">
-                          live {live?.num ?? '—'}
-                        </span>
-                      </span>
-                      <span className="flex flex-col items-stretch gap-1.5 pt-3">
-                        <button type="button" onClick={() => setSaveFor(b)} title={`Save ${b.code}_${nextDraftNum(b.id)}`}
-                          className="rounded-full border border-stone-300 px-3 py-1 text-[11.5px] font-semibold text-stone-600 transition-colors hover:border-cyan-600 hover:text-cyan-700">
-                          Save
-                        </button>
-                        <button type="button" onClick={() => setPublishFor(b)} title={`Publish ${b.code} live`}
-                          className="rounded-full bg-cyan-700 px-3 py-1 text-[11.5px] font-bold text-white transition-colors hover:bg-cyan-600">
-                          Publish
-                        </button>
-                      </span>
-                      <span className={`mt-2 block text-[10.5px] ${dirty ? 'font-semibold text-amber-600' : 'text-stone-300'}`}>
-                        {dirty ? `● ${dirty} unsaved` : 'no changes'}
-                      </span>
-                    </div>
-                  </th>
-                )
-              })}
+              {orderedBlocks.map((b) => (
+                <ColumnCard key={b.id} b={b} compact={compact} onSave={() => setSaveFor(b)} onPublish={(audience) => setPublishFor({ block: b, audience })}
+                  liveSelection={liveSelections[b.id]} onSelectLive={(id) => setLiveSelections((p) => ({ ...p, [b.id]: id }))} />
+              ))}
             </tr>
           </thead>
           <tbody>
             {GROUPS.map((g) => (
-              <GroupRows key={g.id} groupId={g.id} orderedBlocks={orderedBlocks} weights={weights} setWeight={setWeight} colTotals={colTotals} expanded={expanded} toggleSource={toggleSource} />
+              <GroupRows key={g.id} groupId={g.id} orderedBlocks={orderedBlocks} weights={displayedWeights} setWeight={setWeight} colTotals={colTotals} expanded={expanded} toggleSource={toggleSource} readOnly={displayMode !== 'working'} />
             ))}
           </tbody>
           <tfoot>
@@ -340,22 +560,36 @@ export function MixPage() {
       </p>
 
       {saveFor && <SaveModal block={saveFor} onClose={() => setSaveFor(null)} />}
-      {publishFor && <PublishModal block={publishFor} onClose={() => setPublishFor(null)} />}
+      {publishFor && <PublishModal block={publishFor.block} audience={publishFor.audience} onClose={() => setPublishFor(null)} />}
       {showBulk && <BulkPublishModal pending={pending} onClose={() => setShowBulk(false)} />}
     </div>
   )
 }
 
-function WeightCell({ vKey, title, weights, setWeight, total }: {
+function WeightCell({ vKey, title, weights, setWeight, total, readOnly }: {
   vKey: string
   title: string
   weights: Record<string, number>
   setWeight: (key: string, value: number) => void
   total: number
+  readOnly: boolean
 }) {
   const v = weights[vKey] ?? 0
   const pct = v > 0 && total > 0 ? (v / total) * 100 : 0
   const dark = pct >= 28
+  if (readOnly) {
+    return (
+      <td className="border-b border-r border-stone-100 p-0 text-center" style={{ background: cellBg(pct) }}
+          title={`${title} — read-only in this view; switch Display to “Working view” to edit`}>
+        <div className="flex flex-col items-center py-1">
+          <span className={`text-[14.5px] font-bold tabular-nums ${dark ? 'text-white' : 'text-stone-800'} ${v === 0 ? 'text-stone-300' : ''}`}>{v}</span>
+          <span className={`text-[11px] font-medium tabular-nums ${v === 0 ? 'text-stone-300' : dark ? 'text-white/80' : 'text-cyan-800/80'}`}>
+            {v > 0 ? `${pct.toFixed(0)}%` : '—'}
+          </span>
+        </div>
+      </td>
+    )
+  }
   return (
     <td className="border-b border-r border-stone-100 p-0 text-center" style={{ background: cellBg(pct) }}>
       <div className="flex flex-col items-center py-1">
@@ -396,7 +630,7 @@ function AggregateCell({ pts, total, onOpen }: { pts: number; total: number; onO
   )
 }
 
-function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onToggle }: {
+function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onToggle, readOnly }: {
   s: Source
   orderedBlocks: Block[]
   weights: Record<string, number>
@@ -404,6 +638,7 @@ function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onT
   colTotals: Record<string, number>
   open: boolean
   onToggle: () => void
+  readOnly: boolean
 }) {
   const multi = s.variants.length > 1
   return (
@@ -438,7 +673,7 @@ function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onT
           }
           return (
             <WeightCell key={b.id} vKey={`${s.variants[0].id}|${b.id}`} title={`${s.name} × ${b.name}`}
-              weights={weights} setWeight={setWeight} total={total} />
+              weights={weights} setWeight={setWeight} total={total} readOnly={readOnly} />
           )
         })}
       </tr>
@@ -454,7 +689,7 @@ function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onT
           {multi ? (
             orderedBlocks.map((b) => (
               <WeightCell key={b.id} vKey={`${v.id}|${b.id}`} title={`${s.name} · ${v.label} × ${b.name}`}
-                weights={weights} setWeight={setWeight} total={colTotals[b.id]} />
+                weights={weights} setWeight={setWeight} total={colTotals[b.id]} readOnly={readOnly} />
             ))
           ) : (
             <td colSpan={orderedBlocks.length} className="border-b border-stone-100 bg-stone-50/40 px-3 text-left text-[10.5px] italic text-stone-300">
@@ -468,7 +703,7 @@ function SourceRows({ s, orderedBlocks, weights, setWeight, colTotals, open, onT
 }
 
 function DoorRows({ groupId, orderedBlocks }: { groupId: string; orderedBlocks: Block[] }) {
-  const { doorColors } = useStore()
+  const { doorColors, displayMode } = useStore()
   const opts = DOOR_OPTIONS[groupId] ?? []
   const [open, setOpen] = useState(false)
   const [optionId, setOptionId] = useState(opts[0]?.id ?? 'other')
@@ -524,9 +759,10 @@ function DoorRows({ groupId, orderedBlocks }: { groupId: string; orderedBlocks: 
             <td key={b.id} className="border-b border-r border-stone-100 bg-cyan-50/20 p-0 text-center">
               <button
                 type="button"
-                onClick={() => toggleBlock(b.id)}
-                title={`${on ? 'Remove' : 'Show'} this door in ${b.name}`}
-                className={`my-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition-colors ${on ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'border border-stone-300 text-stone-300 hover:border-cyan-600 hover:text-cyan-700'}`}
+                onClick={displayMode === 'working' ? () => toggleBlock(b.id) : undefined}
+                disabled={displayMode !== 'working'}
+                title={displayMode !== 'working' ? 'Doors are edited in Working view' : `${on ? 'Remove' : 'Show'} this door in ${b.name}`}
+                className={`my-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition-colors ${displayMode !== 'working' ? (on ? 'cursor-not-allowed bg-cyan-700/40 text-white' : 'cursor-not-allowed border border-stone-200 text-stone-200') : on ? 'bg-cyan-700 text-white hover:bg-cyan-600' : 'border border-stone-300 text-stone-300 hover:border-cyan-600 hover:text-cyan-700'}`}
               >
                 {on ? 'On' : 'Off'}
               </button>
@@ -605,7 +841,7 @@ function DoorRows({ groupId, orderedBlocks }: { groupId: string; orderedBlocks: 
   )
 }
 
-function GroupRows({ groupId, orderedBlocks, weights, setWeight, colTotals, expanded, toggleSource }: {
+function GroupRows({ groupId, orderedBlocks, weights, setWeight, colTotals, expanded, toggleSource, readOnly }: {
   groupId: string
   orderedBlocks: Block[]
   weights: Record<string, number>
@@ -613,6 +849,7 @@ function GroupRows({ groupId, orderedBlocks, weights, setWeight, colTotals, expa
   colTotals: Record<string, number>
   expanded: Set<string>
   toggleSource: (id: string) => void
+  readOnly: boolean
 }) {
   const g = GROUPS.find((x) => x.id === groupId)!
   return (
@@ -632,7 +869,7 @@ function GroupRows({ groupId, orderedBlocks, weights, setWeight, colTotals, expa
       </tr>
       {g.sources.map((s) => (
         <SourceRows key={s.id} s={s} orderedBlocks={orderedBlocks} weights={weights} setWeight={setWeight}
-          colTotals={colTotals} open={expanded.has(s.id)} onToggle={() => toggleSource(s.id)} />
+          colTotals={colTotals} open={expanded.has(s.id)} onToggle={() => toggleSource(s.id)} readOnly={readOnly} />
       ))}
       <DoorRows groupId={g.id} orderedBlocks={orderedBlocks} />
     </>

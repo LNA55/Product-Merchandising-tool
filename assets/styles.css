@@ -141,6 +141,14 @@ h2 {
   flex: 1 1 240px;
 }
 
+.versions .genesis {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+
 .versions .status {
   font-size: 12px;
   letter-spacing: 0.06em;

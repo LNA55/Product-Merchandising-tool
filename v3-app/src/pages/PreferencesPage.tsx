@@ -1,19 +1,9 @@
 import { useState } from 'react'
 import { Badge, Button } from '../components/ui'
 import { useStore } from '../store'
+import { FINAL_USER_GROUPS } from '../data'
 
 /* ---------- mock data ---------- */
-/** Final user groups = audience segments of the e-commerce site itself.
-    Each group will eventually see its own Merchandising Mix (not wired to the matrix yet). */
-const FINAL_USER_GROUPS = [
-  { name: 'Prospects', criteria: 'Signed out · no cookie history — first contact with the site.', identification: 'Anonymous', share: '34%' },
-  { name: 'Returning visitors', criteria: 'Signed out · known first-party cookie, no account.', identification: 'Cookie', share: '22%' },
-  { name: 'Signed in, no purchase', criteria: 'Identified account · zero purchases to date.', identification: 'Signed in', share: '12%' },
-  { name: 'Active customers', criteria: 'Signed in · one or more purchases in the past 13 months.', identification: 'Signed in', share: '21%' },
-  { name: 'Lapsed customers', criteria: 'Signed in · last purchase more than 13 months ago.', identification: 'Signed in', share: '8%' },
-  { name: 'VIP customers', criteria: 'Signed in · top 5% by revenue over the past 24 months.', identification: 'Signed in', share: '3%' },
-]
-
 const USER_GROUPS = [
   { name: 'Administrators', members: 3, canEdit: true, canPublish: true, canManageBlocks: true, canConfigure: true },
   { name: 'Merchandisers', members: 11, canEdit: true, canPublish: true, canManageBlocks: false, canConfigure: false },

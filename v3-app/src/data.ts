@@ -187,6 +187,24 @@ export interface DoorOption {
 export const DOOR_TAGLINE =
   'Merchandising door to a selected curated list of products — like “Check all the promotions”, “Go to my wishlist” or “Discover the latest arrivals”.'
 
+/* ---------- final user groups ---------- */
+/** Audience segments of the e-commerce site itself. Managed in Preferences;
+    each group will eventually see its own Merchandising Mix. */
+export interface FinalUserGroup {
+  name: string
+  criteria: string
+  identification: 'Anonymous' | 'Cookie' | 'Signed in'
+  share: string
+}
+export const FINAL_USER_GROUPS: FinalUserGroup[] = [
+  { name: 'Prospects', criteria: 'Signed out · no cookie history — first contact with the site.', identification: 'Anonymous', share: '34%' },
+  { name: 'Returning visitors', criteria: 'Signed out · known first-party cookie, no account.', identification: 'Cookie', share: '22%' },
+  { name: 'Signed in, no purchase', criteria: 'Identified account · zero purchases to date.', identification: 'Signed in', share: '12%' },
+  { name: 'Active customers', criteria: 'Signed in · one or more purchases in the past 13 months.', identification: 'Signed in', share: '21%' },
+  { name: 'Lapsed customers', criteria: 'Signed in · last purchase more than 13 months ago.', identification: 'Signed in', share: '8%' },
+  { name: 'VIP customers', criteria: 'Signed in · top 5% by revenue over the past 24 months.', identification: 'Signed in', share: '3%' },
+]
+
 export interface DoorColor {
   id: string
   label: string
@@ -253,6 +271,18 @@ const PEOPLE = {
 }
 
 export const BLOCK_GROUPS = ['Homepage', 'Browsing', 'Product & Purchase Journey'] as const
+
+/** Placement categories — immutable IDs, editable labels (managed in Reference). */
+export const PLACEMENT_CATEGORIES = [
+  { id: 'HOMEPAGE', group: 'Homepage' },
+  { id: 'BROWSING', group: 'Browsing' },
+  { id: 'JOURNEY', group: 'Product & Purchase Journey' },
+] as const
+
+/** Default editable label of a block — e.g. “HP — above the fold”. */
+export function defaultBlockLabel(b: { name: string }): string {
+  return b.name.replace('Merch Block — ', '— ').replace(' Merch Block', '')
+}
 
 export const BLOCKS: Block[] = [
   { id: 'hp-above-fold', code: 'HP-TOP', name: 'HP Merch Block — above the fold', group: 'Homepage', placement: 'Homepage — first merchandising slot, fully visible above the fold.', liveSince: 'March 12, 2025', wire: { kind: 'hp', hl: [38, 20], fold: true }, pm: '', tech: '', owner: '' },
@@ -424,6 +454,8 @@ export interface BlockRelease {
   desc: string
   estimation: ImpactEstimation | null
   analysis?: ImpactAnalysis
+  /** Final user groups this release is shown to (decided at publish time). */
+  audience?: string
 }
 
 export function parseNum(num: string): [number, number] {
@@ -490,6 +522,23 @@ export function seedReleases(b: Block): BlockRelease[] {
     out.push(mk('V1.1', DRAFT_NAMES[(h + 3) % 5], 'draft', 'Jul', 7, d4, p2, `${b.code}_V1.0`, 'Draft iteration on the live configuration — not deployed yet.', (h % 4) !== 0))
   }
   return out
+}
+
+/** The live versions currently served by a block, one line per audience —
+    recorded audience when available, deterministic mock split otherwise. */
+export interface LiveAudienceLine { r: BlockRelease; groups: string }
+export function liveAudienceLines(releases: BlockRelease[]): LiveAudienceLine[] {
+  const live = releases.find((r) => r.status === 'live')
+  const prevs = releases.filter((r) => r.status === 'previously-live')
+  const prevLive = prevs[prevs.length - 1]
+  if (!live) return []
+  if (prevLive) {
+    return [
+      { r: live, groups: live.audience ?? 'Prospects · Returning visitors · Signed in, no purchase · Lapsed customers' },
+      { r: prevLive, groups: prevLive.audience ?? 'Active customers · VIP customers' },
+    ]
+  }
+  return [{ r: live, groups: live.audience ?? 'All visitors' }]
 }
 
 /* ---------- rollout history per block, derived from releases ---------- */

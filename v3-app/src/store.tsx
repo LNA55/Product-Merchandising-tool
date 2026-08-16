@@ -1,15 +1,26 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  BLOCKS, DEFAULT_DOOR_COLORS, defaultWeights, parseNum, seedReleases,
+  BLOCKS, DEFAULT_DOOR_COLORS, defaultBlockLabel, defaultWeights, hashStr, parseNum,
+  PLACEMENT_CATEGORIES, seedReleases,
   type Block, type BlockRelease, type DoorColor, type ImpactEstimation, type Weights,
 } from './data'
+
+export type DisplayMode = 'live' | 'latest-saved' | 'working'
 
 interface Store {
   compact: boolean
   setCompact: (v: boolean) => void
+  displayMode: DisplayMode
+  setDisplayMode: (v: DisplayMode) => void
   doorColors: DoorColor[]
   addDoorColor: (bg: string, label: string) => void
   removeDoorColor: (id: string) => void
+  /** Editable labels of the reference data (IDs are immutable). */
+  blockLabels: Record<string, string>
+  setBlockLabel: (blockId: string, label: string) => void
+  categoryLabels: Record<string, string>
+  setCategoryLabel: (categoryId: string, label: string) => void
+  labelOf: (blockId: string) => string
   weights: Weights
   setWeight: (key: string, value: number) => void
   dirtyOf: (blockId: string) => number
@@ -17,10 +28,15 @@ interface Store {
   releasesOf: (blockId: string) => BlockRelease[]
   liveOf: (blockId: string) => BlockRelease | undefined
   latestDraftOf: (blockId: string) => BlockRelease | undefined
+  /** Latest saved draft newer than the live release (pending publication), if any. */
+  pendingDraftOf: (blockId: string) => BlockRelease | undefined
+  /** The weight set of a given release for its block: real snapshot for releases
+      created this session, deterministic mock for seed releases. */
+  releaseWeights: (r: BlockRelease) => Weights
   nextDraftNum: (blockId: string) => string
   nextPublishNum: (blockId: string) => string
   saveDraft: (blockId: string, name: string, desc: string) => string
-  publishLive: (blockId: string, note: string) => string
+  publishLive: (blockId: string, note: string, audience?: string) => string
   runEstimation: (releaseId: string) => void
 }
 
@@ -33,7 +49,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [baseline, setBaseline] = useState<Weights>(defaults)
   const [releases, setReleases] = useState<BlockRelease[]>(seeds)
   const [compact, setCompact] = useState(false)
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('latest-saved')
   const [doorColors, setDoorColors] = useState<DoorColor[]>(DEFAULT_DOOR_COLORS)
+  const [blockLabels, setBlockLabels] = useState<Record<string, string>>(
+    () => Object.fromEntries(BLOCKS.map((b) => [b.id, defaultBlockLabel(b)])),
+  )
+  const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>(
+    () => Object.fromEntries(PLACEMENT_CATEGORIES.map((c) => [c.id, c.group])),
+  )
+  const setBlockLabel = (blockId: string, label: string) =>
+    setBlockLabels((prev) => ({ ...prev, [blockId]: label }))
+  const setCategoryLabel = (categoryId: string, label: string) =>
+    setCategoryLabels((prev) => ({ ...prev, [categoryId]: label }))
+  const labelOf = (blockId: string) => blockLabels[blockId] ?? blockId
 
   function addDoorColor(bg: string, label: string) {
     const r = parseInt(bg.slice(1, 3), 16), g = parseInt(bg.slice(3, 5), 16), b = parseInt(bg.slice(5, 7), 16)
@@ -67,6 +95,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return d[d.length - 1]
   }
 
+  const pendingDraftOf = (blockId: string) => {
+    const latest = latestDraftOf(blockId)
+    const live = liveOf(blockId)
+    return latest && (!live || latest.sort > live.sort) ? latest : undefined
+  }
+
+  const releaseSnapshots = useRef<Record<string, Weights>>({})
+  function snapshotBlock(blockId: string, releaseId: string) {
+    const snap: Weights = {}
+    for (const k of Object.keys(weights)) if (k.endsWith(`|${blockId}`)) snap[k] = weights[k]
+    releaseSnapshots.current[releaseId] = snap
+  }
+  function releaseWeights(r: BlockRelease): Weights {
+    const snap = releaseSnapshots.current[r.id]
+    if (snap) return snap
+    // deterministic mock: the block's default weights, slightly perturbed per release
+    const out: Weights = {}
+    for (const k of Object.keys(defaults)) {
+      if (!k.endsWith(`|${r.blockId}`)) continue
+      const base = defaults[k]
+      out[k] = base === 0 ? 0 : Math.max(1, Math.min(10, base + ((hashStr(r.id + k) % 3) - 1)))
+    }
+    return out
+  }
+
   function maxNum(blockId: string): [number, number] {
     const nums = releasesOf(blockId).map((r) => parseNum(r.num)).sort((a, z) => a[0] - z[0] || a[1] - z[1])
     return nums[nums.length - 1] ?? [0, 0]
@@ -92,6 +145,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const b = BLOCKS.find((x) => x.id === blockId) as Block
     const num = nextDraftNum(blockId)
     const id = `${b.code}_${num}`
+    snapshotBlock(blockId, id)
     const prev = releasesOf(blockId).pop()
     setReleases((rs) => [...rs, {
       id, blockId, blockCode: b.code, num, name: name || 'Untitled draft', status: 'draft',
@@ -102,10 +156,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return id
   }
 
-  function publishLive(blockId: string, note: string): string {
+  function publishLive(blockId: string, note: string, audience?: string): string {
     const b = BLOCKS.find((x) => x.id === blockId) as Block
     const num = nextPublishNum(blockId)
     const id = `${b.code}_${num}`
+    snapshotBlock(blockId, id)
     const src = latestDraftOf(blockId)?.id ?? liveOf(blockId)?.id ?? null
     setReleases((rs) => rs
       .map((r) => (r.blockId === blockId && r.status === 'live' ? { ...r, status: 'previously-live' as const } : r))
@@ -116,6 +171,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         source: src,
         desc: `Published release created from ${src ?? '—'}. Configuration identical to ${src ?? '—'} at publication.` + (note ? ` — ${note}` : ''),
         estimation: latestDraftOf(blockId)?.estimation ?? null,
+        audience,
       }))
     resetBaselineFor(blockId)
     return id
@@ -135,8 +191,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       compact, setCompact,
+      displayMode, setDisplayMode,
       doorColors, addDoorColor, removeDoorColor,
-      weights, setWeight, dirtyOf, releases, releasesOf, liveOf, latestDraftOf,
+      blockLabels, setBlockLabel, categoryLabels, setCategoryLabel, labelOf,
+      weights, setWeight, dirtyOf, releases, releasesOf, liveOf, latestDraftOf, pendingDraftOf, releaseWeights,
       nextDraftNum, nextPublishNum, saveDraft, publishLive, runEstimation,
     }}>
       {children}
