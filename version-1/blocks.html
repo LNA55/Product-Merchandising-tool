@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manage the Merch blocks — Version 1</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/version-1/assets/tool.css">
+</head>
+<body class="tool">
+
+<header class="site-header">
+  <div class="wrap-wide">
+    <nav class="breadcrumb" aria-label="Fil d'Ariane">
+      <ol>
+        <li><a href="https://shoette.com/">shoette.com</a></li>
+        <li><a href="/">pp</a></li>
+        <li><a href="/">Product Personnalisation</a></li>
+        <li><a href="/version-1/">Version 1</a></li>
+        <li><span aria-current="page">Manage the Merch blocks</span></li>
+      </ol>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap-wide">
+    <p class="eyebrow">Version 1 · mockup</p>
+    <h1>Manage the Merch blocks</h1>
+    <p class="lede">All the merchandising anchor points of the site. Click a block to expand its details: position in the page, ownership, cumulative KPIs, rank and merchandising mix history.</p>
+
+    <p class="add-legend"><strong>Légende orange :</strong> les éléments en orange ont été ajoutés par Claude de sa propre initiative — à valider ou supprimer.</p>
+
+    <div class="toolbar">
+      <label for="kpi-period">KPIs for the</label>
+      <select id="kpi-period"></select>
+    </div>
+
+    <details class="defs">
+      <summary>KPI definitions</summary>
+      <dl>
+        <dt>Displayed</dt><dd>Number of times a page was loaded containing this block.</dd>
+        <dt>Viewed</dt><dd>Page loads where the block was above the waterline, plus views tracked by heat-map-like data for anything under the waterline — with specific data for mobile and desktop.</dd>
+        <dt>Clicked</dt><dd>Clicks on the products of the block.</dd>
+        <dt>Add to cart attributed</dt><dd>Take a user who, in one <a class="session-link" href="/version-1/session.html">session</a>, clicks on at least one of the products from this specific merch block: this is the ratio of the products they clicked on that they finally add to cart in the same <a class="session-link" href="/version-1/session.html">session</a>.</dd>
+      </dl>
+    </details>
+
+    <div id="blocks"></div>
+
+    <div class="addblock-row">
+      <button class="btn btn-primary" id="btn-addblock">Add new block</button>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Plan du site">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/version-1/">Version 1 — Merch mix control</a></li>
+        <li><a href="/version-2/">Version 2 — Prototype React</a></li>
+        <li><a href="/version-3/">Version 3 — Releases par block</a></li>
+        <li><a href="/version-1/blocks.html">Merch blocks</a></li>
+        <li><a href="/version-1/versions.html">Merch mix versions</a></li>
+        <li><a href="/version-1/session.html">Définition de la « session »</a></li>
+      </ul>
+    </nav>
+    <p class="colophon">pp.shoette.com — Product Personnalisation</p>
+  </div>
+</footer>
+
+<script src="/version-1/assets/tool.js"></script>
+<script>renderBlocks('blocks');</script>
+</body>
+</html>

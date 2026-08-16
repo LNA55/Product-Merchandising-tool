@@ -1,0 +1,5 @@
+RewriteEngine On
+RewriteBase /version-3/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /version-3/index.html [L]

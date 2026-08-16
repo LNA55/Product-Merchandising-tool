@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Version 1 — Merch mix control</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/version-1/assets/tool.css">
+</head>
+<body class="tool">
+
+<header class="site-header">
+  <div class="wrap-wide">
+    <nav class="breadcrumb" aria-label="Fil d'Ariane">
+      <ol>
+        <li><a href="https://shoette.com/">shoette.com</a></li>
+        <li><a href="/">pp</a></li>
+        <li><a href="/">Product Personnalisation</a></li>
+        <li><a href="/version-1/">Version 1</a></li>
+        <li><span aria-current="page">Merch mix control</span></li>
+      </ol>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap-wide">
+    <p class="eyebrow">Version 1 · mockup</p>
+    <h1>Merchandising mix control</h1>
+    <p class="lede">Control center of the merchandising tool: the rows are the available data feeds, the columns are the merch anchor points of the e-commerce site. Each cell holds the weight (0–10) of that data source in determining which products are shown to the final customer in that block.</p>
+
+    <p class="add-legend"><strong>Légende orange :</strong> tout ce qui apparaît en orange (lignes, colonnes, badges « ajout ») a été ajouté par Claude de sa propre initiative — ce n'était pas dans le brief. À valider ou supprimer.</p>
+
+    <h2 class="section">Data feeds × merch anchor points
+      <a class="discreet" href="/version-1/blocks.html">Manage the Merch blocks →</a>
+    </h2>
+    <p class="section-sub">Each data feed row shows the API endpoint to hit. Column headers link to the block's detail page. Edit any weight, then save the matrix as a new <em>merchandising mix</em> version below.</p>
+
+    <div id="matrix"></div>
+
+    <div class="savebar">
+      <span class="vinfo">Live: <strong id="v-live">—</strong> &nbsp;·&nbsp; Editing base: <strong id="v-base">—</strong></span>
+      <span class="dirtycount"><span id="dirty-count">0</span> unsaved change(s)</span>
+      <span class="grow"></span>
+      <button class="btn btn-secondary" id="btn-save">Save for a future version</button>
+      <button class="btn btn-primary" id="btn-publish">Publish in live</button>
+    </div>
+
+    <p class="naming-note"><strong>Version naming convention</strong> — the unit is a published value; decimals are internal drafts never published. V0.4 = 4th draft version; V1.0 = first published version. Publishing the last draft of Vn.X creates V(n+1).0 — both are kept, and the description of V(n+1).0 notes that it equals Vn.X. A saved version is immutable: every save generates a new incremental version, because the version name is a unique ID linked to the impact tests. See <a class="discreet" href="/version-1/versions.html">Merch mix versions</a>.</p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Plan du site">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/version-1/">Version 1 — Merch mix control</a></li>
+        <li><a href="/version-2/">Version 2 — Prototype React</a></li>
+        <li><a href="/version-3/">Version 3 — Releases par block</a></li>
+        <li><a href="/version-1/blocks.html">Merch blocks</a></li>
+        <li><a href="/version-1/versions.html">Merch mix versions</a></li>
+        <li><a href="/version-1/session.html">Définition de la « session »</a></li>
+      </ul>
+    </nav>
+    <p class="colophon">pp.shoette.com — Product Personnalisation</p>
+  </div>
+</footer>
+
+<script src="/version-1/assets/tool.js"></script>
+<script>renderMatrix('matrix');</script>
+</body>
+</html>

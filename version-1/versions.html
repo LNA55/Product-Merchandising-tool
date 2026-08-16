@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merch mix versions — Version 1</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/version-1/assets/tool.css">
+</head>
+<body class="tool">
+
+<header class="site-header">
+  <div class="wrap-wide">
+    <nav class="breadcrumb" aria-label="Fil d'Ariane">
+      <ol>
+        <li><a href="https://shoette.com/">shoette.com</a></li>
+        <li><a href="/">pp</a></li>
+        <li><a href="/">Product Personnalisation</a></li>
+        <li><a href="/version-1/">Version 1</a></li>
+        <li><span aria-current="page">Merch mix versions</span></li>
+      </ol>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap-wide">
+    <p class="eyebrow">Version 1 · mockup</p>
+    <h1>Merch mix versions</h1>
+    <p class="lede">Every saved state of the weighting matrix is a <em>merchandising mix</em> version. Versions are immutable — a new incremental version is generated at every save, because the version name is a unique ID linked to the impact tests.</p>
+
+    <details class="defs">
+      <summary>Naming convention</summary>
+      <p>The unit is a published value; decimals after the dot are internal drafts never published.<br>
+      <b>V0.4</b> = 4th draft version · <b>V1.0</b> = first published version.<br>
+      Publishing the last draft Vn.X creates V(n+1).0 — both are kept, and the description of V(n+1).0 notes that it equals Vn.X.</p>
+    </details>
+
+    <details class="defs">
+      <summary>Impact Estimation & Impact Analysis</summary>
+      <p><b>Run Impact Estimation</b> (pre-launch) projects the expected impact of a mix version before it goes live. For <b>published</b> versions, the feedback compares the post-launch <b>Impact Analysis</b> to the pre-launch <b>Impact Estimation</b>.<br>
+      These analyses are not computed by this tool: they run in an external, integrated tool, and the results are sent back here.</p>
+    </details>
+
+    <div id="versions"></div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Plan du site">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/version-1/">Version 1 — Merch mix control</a></li>
+        <li><a href="/version-2/">Version 2 — Prototype React</a></li>
+        <li><a href="/version-3/">Version 3 — Releases par block</a></li>
+        <li><a href="/version-1/blocks.html">Merch blocks</a></li>
+        <li><a href="/version-1/versions.html">Merch mix versions</a></li>
+        <li><a href="/version-1/session.html">Définition de la « session »</a></li>
+      </ul>
+    </nav>
+    <p class="colophon">pp.shoette.com — Product Personnalisation</p>
+  </div>
+</footer>
+
+<script src="/version-1/assets/tool.js"></script>
+<script>renderVersions('versions');</script>
+</body>
+</html>

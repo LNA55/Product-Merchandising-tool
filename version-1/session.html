@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What “session” means — Version 1</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/version-1/assets/tool.css">
+</head>
+<body class="tool">
+
+<header class="site-header">
+  <div class="wrap-wide">
+    <nav class="breadcrumb" aria-label="Fil d'Ariane">
+      <ol>
+        <li><a href="https://shoette.com/">shoette.com</a></li>
+        <li><a href="/">pp</a></li>
+        <li><a href="/">Product Personnalisation</a></li>
+        <li><a href="/version-1/">Version 1</a></li>
+        <li><span aria-current="page">« Session » definition</span></li>
+      </ol>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap-wide prose">
+    <p class="eyebrow">Version 1 · mockup</p>
+    <h1>What “session” means in these data</h1>
+    <p class="lede">Everywhere the word <em>session</em> appears in this tool — in KPI definitions, in the session browsing data feeds — it refers to the definition below, not to a classic web-analytics session.</p>
+
+    <h2>Logged-in user</h2>
+    <p>The “session” is the <strong>rolling 48-hour accumulation of all this user's sessions, across all devices</strong>. If a customer browses on mobile in the morning and comes back on desktop in the evening, both count as the same session for these data — as long as they fall within the rolling 48-hour window.</p>
+
+    <h2>Anonymous visitor (not logged in)</h2>
+    <p>The “session” is a <strong>single session tracked by cookies</strong>, on that one browser and device. No cross-device merging is possible without a login.</p>
+
+    <h2>Where it applies</h2>
+    <ul>
+      <li>The <strong>Session browsing data</strong> feeds (recently viewed, already in your cart, similar to the most recently viewed product…): their scope is the current session, including logged sessions of the past 48 hours.</li>
+      <li>The <strong>Add to cart attributed</strong> KPI: clicks and add-to-carts are matched within the same session as defined here.</li>
+    </ul>
+
+    <div class="callout">
+      <strong>Note</strong> — this definition, and therefore its parameters (48-hour window, cross-device merging, cookie scope), can be modified. The tool does not offer this setting for now.
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <nav aria-label="Plan du site">
+      <ul>
+        <li><a href="/">Accueil</a></li>
+        <li><a href="/version-1/">Version 1 — Merch mix control</a></li>
+        <li><a href="/version-2/">Version 2 — Prototype React</a></li>
+        <li><a href="/version-3/">Version 3 — Releases par block</a></li>
+        <li><a href="/version-1/blocks.html">Merch blocks</a></li>
+        <li><a href="/version-1/versions.html">Merch mix versions</a></li>
+        <li><a href="/version-1/session.html">Définition de la « session »</a></li>
+      </ul>
+    </nav>
+    <p class="colophon">pp.shoette.com — Product Personnalisation</p>
+  </div>
+</footer>
+
+</body>
+</html>
