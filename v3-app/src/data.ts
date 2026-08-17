@@ -22,6 +22,8 @@ export interface SourceVariant {
   label: string
   explain: string
   api: string
+  /** This call needs an identified customer — unusable for anonymous audiences. */
+  requiresLogin?: boolean
 }
 export interface Source {
   id: string
@@ -36,6 +38,8 @@ export interface SourceGroup {
   sub: string
   badge?: string
   sessionInSub?: boolean
+  /** Every call of this group needs an identified customer (endpoints in /users/{userId}/…). */
+  requiresLogin?: boolean
   sources: Source[]
 }
 
@@ -101,6 +105,7 @@ export const GROUPS: SourceGroup[] = [
   },
   {
     id: 'preferences',
+    requiresLogin: true,
     title: 'User Preferences',
     sub: 'Personal preference signals available when the customer is identified and personal data is available.',
     badge: 'Logged-in users',
@@ -119,6 +124,7 @@ export const GROUPS: SourceGroup[] = [
   },
   {
     id: 'commercial',
+    requiresLogin: true,
     title: 'Customer Commercial History',
     sub: 'Signals generated from the customer’s historical purchasing activity.',
     badge: 'Logged-in customers',
@@ -146,7 +152,7 @@ export const GROUPS: SourceGroup[] = [
     sources: [
       { id: 'recently-viewed', name: 'Recently viewed', desc: 'Products viewed during the relevant session window.', api: `${API}/session/recently-viewed`, variants: [
         { id: 'recently-viewed-current', label: 'Current session only', explain: 'Products viewed during the current browsing session on this device — the most immediate re-engagement signal.', api: `${API}/session/recently-viewed?scope=current` },
-        { id: 'recently-viewed-48h', label: 'Rolling 48h logged sessions', explain: 'For identified customers: products viewed across all devices during the rolling 48-hour session window (see the session definition).', api: `${API}/session/recently-viewed?scope=48h` },
+        { id: 'recently-viewed-48h', requiresLogin: true, label: 'Rolling 48h logged sessions', explain: 'For identified customers: products viewed across all devices during the rolling 48-hour session window (see the session definition).', api: `${API}/session/recently-viewed?scope=48h` },
       ] },
       { id: 'recent-searches', name: 'Recent search intent', desc: 'Products or categories inferred from recent searches.', api: `${API}/session/recent-searches`, variants: [
         { id: 'recent-searches-session', label: 'Searches in the current session window', explain: 'Products and categories matched against the queries typed during the session window, most recent query weighted highest.', api: `${API}/session/recent-searches?scope=session` },
@@ -178,14 +184,159 @@ export const ALL_VARIANTS: SourceVariant[] = SOURCES.flatMap((s) => s.variants)
 /* ---------- merchandising doors ---------- */
 /** A "Merchandising door" is not a product feed: it is a curated link tile placed
     inside a Merch Block, sending the customer to a curated list of products. */
+/* ---------- block titles: the customer-facing headline of a Merch Block ---------- */
+/** Suggested title of a "pure player" block — one driven by this data source only. */
+export const PURE_BLOCK_TITLES: Record<string, string> = {
+  'new-products': 'Just in — the latest arrivals',
+  'low-stock': 'Almost gone',
+  'back-in-stock': 'Back in stock',
+  'on-promotion': 'On sale right now',
+  'award-winning': 'Award-winning products',
+  'press-features': 'As seen in the press',
+  'top-rated': 'Top rated by our customers',
+  trending: 'Trending right now',
+  'best-sellers': 'Our best sellers',
+  'most-viewed': 'The most viewed this week',
+  'most-atc': 'Most added to cart',
+  'recent-purchases': 'Just bought by other customers',
+  affinities: 'Your favorite brands & categories',
+  wishlist: 'From your wishlist',
+  'personal-affinity': 'Picked for you',
+  purchases: 'You bought these before',
+  replenishment: 'Time to restock',
+  'similar-purchases': 'Similar to what you bought',
+  'purchase-cross-sell': 'Match your recent purchases',
+  'recently-viewed': 'Recently viewed',
+  'recent-searches': 'Based on your last search',
+  'recent-categories': 'Back to what you were browsing',
+  cart: 'Already in your cart',
+  'cart-fbt': 'Goes well with your cart',
+  'recent-view-fbt': 'Goes well with what you just viewed',
+  'recent-view-similar': 'Similar to what you just viewed',
+}
+/** Example rules a PM can hand to the model — prefilled on a few sources to show the intent. */
+export const PURE_BLOCK_RULES: Record<string, string> = {
+  'new-products': 'Only if at least 8 products are less than 14 days old — otherwise fall back to a generic title.',
+  'on-promotion': 'Never during full-price periods. Below 4 discounted products, switch to a generic title.',
+  wishlist: 'Signed-in visitors with 3 wishlist items or more. Never above the fold on the homepage.',
+  'purchase-cross-sell': 'Use when the block is built from a single order less than 30 days old, otherwise say “Goes well with your recent orders”.',
+  'recently-viewed': 'Only if the visitor viewed 3 products or more in the current session. Never right after an order confirmation.',
+}
+/** Generic titles used when no single data source carries the block. */
+export interface MixTitle {
+  id: string
+  /** editable description of the mix this title covers — suggested default */
+  when: string
+  title: string
+  rule: string
+}
+export const MIX_TITLES: MixTitle[] = [
+  { id: 'selection', when: 'A mix', title: 'Our selection for you', rule: 'Default title when no data source carries more than half of the products shown.' },
+  { id: 'may-like', when: 'A mix', title: 'We think you may like', rule: 'Prefer this one when the block leans on behavioral signals rather than catalog ones.' },
+  { id: 'picked', when: 'A mix', title: 'Picked for you', rule: 'Signed-in visitors only — it promises personalization, so never serve it to Prospects.' },
+  { id: 'also-like', when: 'A mix', title: 'You may also like', rule: 'For blocks placed below the product information on a product page.' },
+  { id: 'explore', when: 'A mix', title: 'More to explore', rule: 'Browsing and category pages, when the block widens the choice instead of narrowing it.' },
+  { id: 'inspiration', when: 'A mix', title: 'Your daily inspiration', rule: 'Homepage only, and only when the mix changes at least once a day.' },
+]
+
+/* ---------- site content & navigation endpoints (not product feeds) ---------- */
+/** Non-product endpoints: they power the dynamic destinations of the Merchandising Doors. */
+export interface ContentEndpoint {
+  id: string
+  name: string
+  desc: string
+  api: string
+  usedFor: string
+  params: { name: string; in: string; example: string; type: string; desc: string; required?: boolean }[]
+  mock: object
+}
+export const CONTENT_ENDPOINTS: ContentEndpoint[] = [
+  {
+    id: 'categories',
+    name: 'Catalog categories',
+    desc: 'The live category tree of the catalog — ids, labels, target URLs and product counts.',
+    api: 'https://api.store.example/v1/catalog/categories',
+    usedFor: 'Category entries of the Merchandising Doors — the list always mirrors the current catalog, nothing to maintain by hand.',
+    params: [
+      { name: 'depth', in: 'query', example: '2', type: 'integer', desc: 'Depth of the category tree returned (1 = top level only).' },
+      { name: 'parent', in: 'query', example: 'cat-shoes', type: 'string', desc: 'Restrict the response to the children of this category.' },
+    ],
+    mock: {
+      categories: [
+        { id: 'cat-shoes', label: 'Shoes', url: '/c/shoes', products: 1284, children: 8 },
+        { id: 'cat-bags', label: 'Bags & Leather goods', url: '/c/bags', products: 642, children: 5 },
+        { id: 'cat-care', label: 'Care & Accessories', url: '/c/care', products: 318, children: 4 },
+      ],
+      count: 42, refresh: 'hourly', sandbox: true,
+    },
+  },
+  {
+    id: 'landing-pages',
+    name: 'Marketing landing pages',
+    desc: 'The marketing landing pages currently published in the CMS — “The Christmas selection” and the likes.',
+    api: 'https://api.store.example/v1/content/landing-pages',
+    usedFor: 'Landing-page entries of the Merchandising Doors — maintained by the marketing team in the CMS, retrieved live.',
+    params: [
+      { name: 'status', in: 'query', example: 'live', type: 'string', desc: 'Only pages currently published.' },
+      { name: 'tag', in: 'query', example: 'seasonal', type: 'string', desc: 'Marketing tag set in the CMS.' },
+    ],
+    mock: {
+      pages: [
+        { id: 'lp-xmas-2026', title: 'The Christmas selection', url: '/l/christmas-selection', campaign_ends: '2026-12-26' },
+        { id: 'lp-backtoschool', title: 'Back to school essentials', url: '/l/back-to-school', campaign_ends: '2026-09-15' },
+        { id: 'lp-icons', title: 'Our icons, revisited', url: '/l/icons', campaign_ends: null },
+      ],
+      count: 17, source: 'CMS', sandbox: true,
+    },
+  },
+]
+
 export interface DoorOption {
   id: string
   label: string
   defaultText: string
   defaultUrl: string
 }
-export const DOOR_TAGLINE =
-  'Merchandising door to a selected curated list of products — like “Check all the promotions”, “Go to my wishlist” or “Discover the latest arrivals”.'
+/** A firm instruction placed on one item of a block: a fixed card with its own text,
+    colour, destination and position. Part of the block release, snapshotted whole. */
+export interface DoorConfig {
+  optionId: string
+  otherLabel: string
+  text: string
+  url: string
+  colorId: string
+  mode: 'slot' | 'last-visible' | 'end'
+  slot: number
+}
+/** One door as captured for a block: which source group it belongs to, and its full config. */
+export interface DoorPlacement {
+  groupId: string
+  config: DoorConfig
+}
+export function defaultDoorConfig(groupId: string): DoorConfig {
+  const o = (DOOR_OPTIONS[groupId] ?? [])[0]
+  return {
+    optionId: o?.id ?? 'other',
+    otherLabel: '',
+    text: o?.defaultText ?? '',
+    url: o?.defaultUrl ?? 'https://www.store.example/',
+    colorId: 'cyan-light',
+    mode: 'last-visible',
+    slot: 4,
+  }
+}
+/** Human-readable position of a door inside the block. */
+export function doorPositionLabel(c: DoorConfig): string {
+  if (c.mode === 'slot') return `slot ${c.slot}`
+  if (c.mode === 'end') return 'end of the list'
+  return 'last visible card'
+}
+export function doorLabelOf(c: DoorConfig, groupId: string): string {
+  if (c.optionId === 'other') return c.otherLabel || 'Other — custom door'
+  return (DOOR_OPTIONS[groupId] ?? []).find((o) => o.id === c.optionId)?.label ?? c.optionId
+}
+
+export const DOOR_TAGLINE = 'See Preferences to edit the available options.'
 
 /* ---------- final user groups ---------- */
 /** Audience segments of the e-commerce site itself. Managed in Preferences;
@@ -204,6 +355,48 @@ export const FINAL_USER_GROUPS: FinalUserGroup[] = [
   { name: 'Lapsed customers', criteria: 'Signed in · last purchase more than 13 months ago.', identification: 'Signed in', share: '8%' },
   { name: 'VIP customers', criteria: 'Signed in · top 5% by revenue over the past 24 months.', identification: 'Signed in', share: '3%' },
 ]
+
+/* ---------- audience arithmetic (a release audience is a set of final user groups) ---------- */
+export function audienceToSet(audience?: string): Set<string> {
+  if (!audience || audience === 'All visitors') return new Set(FINAL_USER_GROUPS.map((g) => g.name))
+  if (audience === 'Nobody — hidden') return new Set()
+  return new Set(audience.split(' · '))
+}
+/** Short audience names for the tight ColumnCards — menus keep the full names. */
+export const AUDIENCE_SHORT: Record<string, string> = {
+  'Prospects': 'Prospects',
+  'Returning visitors': 'returning',
+  'Signed in, no purchase': 'signedIn',
+  'Active customers': 'Active customers',
+  'Lapsed customers': 'lapsed',
+  'VIP customers': 'VIP',
+}
+export function shortAudience(label: string): string {
+  if (label === 'All visitors' || label === 'Nobody — hidden') return label
+  return label.split(' · ').map((g) => AUDIENCE_SHORT[g] ?? g).join(' · ')
+}
+
+/** Anonymous audiences cannot be identified, so login-only calls return nothing for them. */
+export function isAnonymousAudience(groupName: string): boolean {
+  const g = FINAL_USER_GROUPS.find((x) => x.name === groupName)
+  return !!g && g.identification !== 'Signed in'
+}
+/** Ids of every API call that requires an identified customer. */
+export function loginOnlyVariantIds(): Set<string> {
+  const out = new Set<string>()
+  for (const g of GROUPS) {
+    for (const s of g.sources) {
+      for (const v of s.variants) if (g.requiresLogin || v.requiresLogin) out.add(v.id)
+    }
+  }
+  return out
+}
+
+export function audienceLabelOf(set: Set<string>): string {
+  if (set.size === FINAL_USER_GROUPS.length) return 'All visitors'
+  if (set.size === 0) return 'Nobody — hidden'
+  return FINAL_USER_GROUPS.filter((g) => set.has(g.name)).map((g) => g.name).join(' · ')
+}
 
 export interface DoorColor {
   id: string
@@ -456,6 +649,10 @@ export interface BlockRelease {
   analysis?: ImpactAnalysis
   /** Final user groups this release is shown to (decided at publish time). */
   audience?: string
+  /** Releases created together by one audience-split save/publish share this id. */
+  batch?: string
+  /** This release is the altered variant: login-only data sources forced to 0 for an anonymous audience. */
+  zeroedForAudience?: boolean
 }
 
 export function parseNum(num: string): [number, number] {
@@ -468,7 +665,7 @@ function mockEstimation(seed: string): ImpactEstimation {
   const a = 0.3 + (hashStr(seed + 'a') % 32) / 10
   return { engagement: `+${e.toFixed(1)}%`, atc: `+${a.toFixed(1)}%` }
 }
-function mockAnalysis(seed: string, est: ImpactEstimation): ImpactAnalysis {
+export function mockAnalysis(seed: string, est: ImpactEstimation): ImpactAnalysis {
   const shift = (v: string, s: string) => {
     const n = parseFloat(v)
     const d = ((hashStr(s) % 13) - 6) / 10
@@ -528,17 +725,23 @@ export function seedReleases(b: Block): BlockRelease[] {
     recorded audience when available, deterministic mock split otherwise. */
 export interface LiveAudienceLine { r: BlockRelease; groups: string }
 export function liveAudienceLines(releases: BlockRelease[]): LiveAudienceLine[] {
-  const live = releases.find((r) => r.status === 'live')
+  const lives = releases.filter((r) => r.status === 'live')
+  if (lives.length === 0) return []
+  if (lives.length > 1 || lives[0].audience) {
+    // real audience state (this-session publishes) — most recent publication first
+    return [...lives].sort((a, z) => z.sort - a.sort).map((l) => ({ r: l, groups: l.audience ?? 'All visitors' }))
+  }
+  // seed data fallback — deterministic mock split between live and previous live
+  const live = lives[0]
   const prevs = releases.filter((r) => r.status === 'previously-live')
   const prevLive = prevs[prevs.length - 1]
-  if (!live) return []
   if (prevLive) {
     return [
-      { r: live, groups: live.audience ?? 'Prospects · Returning visitors · Signed in, no purchase · Lapsed customers' },
+      { r: live, groups: 'Prospects · Returning visitors · Signed in, no purchase · Lapsed customers' },
       { r: prevLive, groups: prevLive.audience ?? 'Active customers · VIP customers' },
     ]
   }
-  return [{ r: live, groups: live.audience ?? 'All visitors' }]
+  return [{ r: live, groups: 'All visitors' }]
 }
 
 /* ---------- rollout history per block, derived from releases ---------- */
@@ -548,6 +751,7 @@ export interface MixHistoryEntry {
   start: string
   end: string
   rollout: string
+  audience: string
   status: 'Experiment rollout' | 'Full rollout' | 'Replaced'
 }
 export function rolloutHistory(releases: BlockRelease[]): MixHistoryEntry[] {
@@ -559,9 +763,10 @@ export function rolloutHistory(releases: BlockRelease[]): MixHistoryEntry[] {
       releaseId: p.id,
       releaseName: p.name,
       start: p.date,
-      end: next ? next.date : 'Present',
+      end: p.status === 'live' ? 'Present' : next ? next.date : 'Present',
       rollout: '10% × 2 weeks → 100%',
-      status: next ? 'Replaced' : p.status === 'live' ? 'Full rollout' : 'Replaced',
+      audience: p.audience ?? 'All visitors',
+      status: p.status === 'live' ? 'Full rollout' : 'Replaced',
     })
   })
   return out.reverse()

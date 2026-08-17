@@ -1,13 +1,19 @@
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { BLOCKS } from '../data'
 import { useStore } from '../store'
 import { Badge } from '../components/ui'
 
 export function ImpactPage() {
   const { releases, latestDraftOf } = useStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  /* placement filter — immutable placement IDs; pre-filled by ?placement= (deep links from Merch Blocks) */
+  const placement = searchParams.get('placement') ?? 'all'
+  const setPlacement = (code: string) => setSearchParams(code === 'all' ? {} : { placement: code }, { replace: true })
+  const blocks = BLOCKS.filter((b) => placement === 'all' || b.code === placement)
 
   const analyses = releases
     .filter((r) => r.status !== 'draft' && r.analysis)
+    .filter((r) => placement === 'all' || BLOCKS.find((x) => x.id === r.blockId)?.code === placement)
     .sort((a, z) => z.sort - a.sort)
 
   return (
@@ -16,6 +22,21 @@ export function ImpactPage() {
       <p className="mt-1 max-w-3xl text-sm text-stone-500">
         All impact material in one place: pre-launch <b className="text-stone-700">Impact Estimations</b> of the candidate configurations, and post-launch <b className="text-stone-700">Impact Analyses</b> of the live releases. Both are computed by the external Impact Suite (integrated) — results are sent back here.
       </p>
+
+      <div className="soft-card mt-5 flex flex-wrap items-center gap-x-7 gap-y-3 px-5 py-3 text-sm">
+        <span className="flex items-center gap-2 whitespace-nowrap">
+          <label htmlFor="impact-placement" className="whitespace-nowrap text-stone-500">Merch block placement <span className="text-[11px] text-stone-400">(ID — immutable)</span></label>
+          <select
+            id="impact-placement"
+            value={placement}
+            onChange={(e) => setPlacement(e.target.value)}
+            className="rounded-full border border-stone-300 bg-white px-3 py-1.5 font-mono text-[12.5px] font-semibold text-cyan-800 focus:border-cyan-600 focus:outline-none"
+          >
+            <option value="all">All placements</option>
+            {BLOCKS.map((b) => <option key={b.id} value={b.code}>{b.code}</option>)}
+          </select>
+        </span>
+      </div>
 
       <h2 className="mt-8 mb-1 text-[16px] font-bold tracking-tight text-stone-900">Impact Estimations <span className="ml-1 align-middle text-[11px] font-medium text-stone-400">pre-launch · candidate configuration per block</span></h2>
       <div className="soft-card mt-2 overflow-x-auto">
@@ -30,7 +51,7 @@ export function ImpactPage() {
             </tr>
           </thead>
           <tbody>
-            {BLOCKS.map((b) => {
+            {blocks.map((b) => {
               const draft = latestDraftOf(b.id)
               const done = b.id === 'pdp'
               return (

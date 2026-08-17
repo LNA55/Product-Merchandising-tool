@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 export function Button({ children, variant = 'secondary', size = 'md', onClick, disabled, type = 'button' }: {
@@ -99,13 +99,33 @@ export function ExternalLink({ href, children }: { href: string; children: React
   )
 }
 
+/** Discreet info popin — opens on hover and on click (click does not bubble,
+    so it is safe inside clickable card headers). */
 export function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
   return (
     <span
-      className="ml-1 inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-stone-300 text-[9px] font-semibold text-stone-400 select-none"
-      title={text}
+      className="relative ml-1 inline-block align-middle"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
     >
-      i
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label="More information"
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen(!open) }}
+        className={`inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border text-[9px] font-semibold select-none ${open ? 'border-cyan-600 text-cyan-700' : 'border-stone-300 text-stone-400'}`}
+      >
+        i
+      </span>
+      {open && (
+        <span
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-full left-1/2 z-50 mb-1.5 w-60 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-3 py-2 text-left text-[11px] font-normal tracking-normal normal-case leading-snug text-stone-600 shadow-xl"
+        >
+          {text}
+        </span>
+      )}
     </span>
   )
 }

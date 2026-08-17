@@ -10,7 +10,6 @@ import { EstimationPage } from './pages/EstimationPage'
 import { ImpactPage } from './pages/ImpactPage'
 import { HomePage } from './pages/HomePage'
 import { PreferencesPage } from './pages/PreferencesPage'
-import { ReferencePage } from './pages/ReferencePage'
 import { BLOCKS } from './data'
 
 /** Thin subdomain bar with the breadcrumb, like the rest of pp.shoette.com. */
@@ -24,7 +23,6 @@ function Breadcrumb() {
     label = `Impact Estimation — ${blk?.code ?? '?'}`
   }
   else if (pathname.startsWith('/impact')) label = 'Impact'
-  else if (pathname.startsWith('/reference')) label = 'Reference'
   else if (pathname.startsWith('/preferences')) label = 'Preferences'
   else if (pathname.startsWith('/merch-blocks')) label = 'Merch Blocks'
   else if (pathname.startsWith('/versions/')) label = decodeURIComponent(pathname.split('/')[2] ?? '')
@@ -64,7 +62,6 @@ function AppHeader() {
         <NavLink to="/merch-blocks" className={linkCls}>Merch Blocks</NavLink>
         <NavLink to="/versions" className={linkCls}>Release History</NavLink>
         <NavLink to="/impact" className={linkCls}>Impact</NavLink>
-        <NavLink to="/reference" className={linkCls}>Reference</NavLink>
         <NavLink to="/preferences" className={linkCls}>Preferences</NavLink>
       </nav>
       {pathname === '/merchandising-mix' && compact && (
@@ -107,7 +104,6 @@ export default function App() {
             <Route path="/swagger" element={<SwaggerPage />} />
             <Route path="/estimation/:blockId" element={<EstimationPage />} />
             <Route path="/impact" element={<ImpactPage />} />
-            <Route path="/reference" element={<ReferencePage />} />
             <Route path="/preferences" element={<PreferencesPage />} />
             <Route path="/merch-blocks" element={<BlocksPage />} />
             <Route path="/versions" element={<VersionsPage />} />

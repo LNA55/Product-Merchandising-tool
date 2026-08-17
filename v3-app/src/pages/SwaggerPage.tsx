@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GROUPS, hashStr, type Source, type SourceVariant } from '../data'
+import { CONTENT_ENDPOINTS, GROUPS, hashStr, type ContentEndpoint, type Source, type SourceVariant } from '../data'
 import { useStore } from '../store'
 import { Badge } from '../components/ui'
 
@@ -154,6 +154,66 @@ function EndpointCard({ s }: { s: Source }) {
   )
 }
 
+function ContentEndpointCard({ e }: { e: ContentEndpoint }) {
+  const [open, setOpen] = useState(false)
+  const [tryOut, setTryOut] = useState(false)
+  const path = e.api.replace(API_BASE, '')
+  return (
+    <div className="soft-card mb-2.5 overflow-hidden">
+      <button type="button" onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-stone-50/70">
+        <span className="rounded-lg bg-cyan-700 px-2.5 py-1 font-mono text-[11px] font-bold tracking-wide text-white">GET</span>
+        <code className="font-mono text-[13px] font-semibold text-stone-800">{path}</code>
+        <span className="hidden text-[12.5px] text-stone-400 sm:inline">{e.name}</span>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10.5px] font-semibold text-cyan-700">powers the Merch Doors</span>
+          <span className={`text-xs text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-stone-200 px-5 py-4">
+          <p className="text-[13px] text-stone-600">{e.desc}</p>
+          <p className="mt-1 text-[12px] text-stone-500"><b className="font-semibold text-stone-600">Used for:</b> {e.usedFor}</p>
+          <h4 className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-500">Parameters</h4>
+          <div className="overflow-x-auto rounded-xl border border-stone-200">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50 text-left text-[10.5px] uppercase tracking-wide text-stone-400">
+                  <th className="px-3 py-1.5 font-semibold">Name</th>
+                  <th className="px-3 py-1.5 font-semibold">In</th>
+                  <th className="px-3 py-1.5 font-semibold">Type</th>
+                  <th className="px-3 py-1.5 font-semibold">Example</th>
+                  <th className="px-3 py-1.5 font-semibold">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {e.params.map((prm) => (
+                  <tr key={prm.name} className="border-b border-stone-100 last:border-0">
+                    <td className="px-3 py-1.5 font-mono font-semibold text-cyan-800">{prm.name}</td>
+                    <td className="px-3 py-1.5 text-stone-500">{prm.in}</td>
+                    <td className="px-3 py-1.5 text-stone-500">{prm.type}</td>
+                    <td className="px-3 py-1.5 font-mono text-stone-500">{prm.example}</td>
+                    <td className="px-3 py-1.5 text-stone-500">{prm.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTryOut(!tryOut)}
+            className="mt-3 rounded-full border border-cyan-300 px-2.5 py-0.5 text-[10.5px] font-semibold text-cyan-700 hover:bg-cyan-50"
+          >
+            {tryOut ? 'Hide response' : 'Try it out'}
+          </button>
+          {tryOut && (
+            <pre className="mt-2 overflow-x-auto rounded-xl bg-stone-900 p-3 font-mono text-[10.5px] leading-relaxed text-cyan-100">{JSON.stringify(e.mock, null, 2)}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function SwaggerPage() {
   return (
     <div className="px-8 py-8">
@@ -179,6 +239,17 @@ export function SwaggerPage() {
           {g.sources.map((s) => <EndpointCard key={s.id} s={s} />)}
         </section>
       ))}
+
+      <section className="mt-8">
+        <div className="mb-2.5 flex flex-wrap items-baseline gap-2">
+          <h2 className="text-[16px] font-bold tracking-tight text-stone-900">Site Content &amp; Navigation</h2>
+          <span className="text-[12px] text-stone-400">{CONTENT_ENDPOINTS.length} endpoints — not product feeds</span>
+        </div>
+        <p className="mb-2.5 max-w-3xl text-[12.5px] text-stone-500">
+          Live site structure and marketing content. These endpoints feed the dynamic destinations of the Merchandising Doors: category pages straight from the catalog tree, and landing pages published by the marketing team.
+        </p>
+        {CONTENT_ENDPOINTS.map((e) => <ContentEndpointCard key={e.id} e={e} />)}
+      </section>
     </div>
   )
 }

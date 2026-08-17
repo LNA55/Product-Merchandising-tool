@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { BLOCKS } from '../data'
+import { BLOCKS, doorLabelOf, doorPositionLabel } from '../data'
 import { useStore } from '../store'
 import { Button, ExternalLink } from '../components/ui'
 import { statusBadge } from './VersionsPage'
 
 export function VersionDetailPage() {
   const { releaseId } = useParams()
-  const { releases, runEstimation } = useStore()
+  const { releases, runEstimation, releaseDoors, doorColors } = useStore()
   const [running, setRunning] = useState(false)
   const r = releases.find((x) => x.id === releaseId)
 
@@ -41,12 +41,44 @@ export function VersionDetailPage() {
       <dl className="soft-card mt-5 divide-y divide-stone-100 text-sm">
         <div className="flex justify-between px-4 py-2.5"><dt className="text-stone-500">Merch Block</dt><dd className="font-medium">{block.name} <span className="font-mono text-[11px] text-cyan-700">({block.code})</span></dd></div>
         <div className="flex justify-between px-4 py-2.5"><dt className="text-stone-500">Version</dt><dd className="font-medium">{r.num}</dd></div>
+        <div className="flex justify-between gap-8 px-4 py-2.5">
+          <dt className="shrink-0 text-stone-500">Audience</dt>
+          <dd className="text-right font-medium">
+            {r.audience ?? 'All visitors'}
+            <span className="ml-2 text-[11px] font-normal text-stone-400">
+              {r.status === 'draft' ? 'planned — editable until publication' : r.status === 'live' ? 'currently served' : 'served while live'}
+            </span>
+          </dd>
+        </div>
         <div className="flex justify-between px-4 py-2.5"><dt className="text-stone-500">Created</dt><dd className="font-medium">{r.date}</dd></div>
         <div className="flex justify-between px-4 py-2.5"><dt className="text-stone-500">Created by</dt><dd className="font-medium">{r.by}</dd></div>
         <div className="flex justify-between px-4 py-2.5"><dt className="text-stone-500">Created from</dt>
           <dd className="font-medium">{r.source ? <Link to={`/versions/${r.source}`} className="font-mono text-[12px] text-cyan-700 hover:underline">{r.source}</Link> : '—'}</dd></div>
         <div className="flex justify-between gap-8 px-4 py-2.5"><dt className="shrink-0 text-stone-500">Description</dt><dd className="text-right text-stone-700">{r.desc}</dd></div>
       </dl>
+
+      <h2 className="mt-8 text-[13px] font-bold uppercase tracking-wide text-stone-500">Firm instructions of this release</h2>
+      <p className="mt-1 text-xs text-stone-400">Beyond the weighted product selection, a release carries the fixed items placed in the block — each captured whole, exactly as configured at save time.</p>
+      <div className="soft-card mt-3 p-4">
+        {(() => {
+          const doors = releaseDoors(r)
+          if (doors.length === 0) return <p className="text-sm text-stone-500">No merchandising door — this release carries the weighted product selection only.</p>
+          return doors.map((d) => {
+            const c = doorColors.find((x) => x.id === d.config.colorId) ?? doorColors[0]
+            return (
+              <div key={d.groupId} className="mb-3 last:mb-0">
+                <p className="text-sm font-semibold text-stone-800">{doorLabelOf(d.config, d.groupId)}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center rounded-xl border px-3.5 py-2 text-[13px] font-semibold"
+                    style={{ background: c.bg, color: c.ink, borderColor: c.border }}>{d.config.text}</span>
+                  <span className="text-[12px] text-stone-500">position: <b className="font-semibold text-stone-700">{doorPositionLabel(d.config)}</b></span>
+                </div>
+                <p className="mt-1 font-mono text-[11.5px] break-all text-cyan-800">{d.config.url}</p>
+              </div>
+            )
+          })
+        })()}
+      </div>
 
       <h2 className="mt-8 text-[13px] font-bold uppercase tracking-wide text-stone-500">Impact Estimation</h2>
       <p className="mt-1 text-xs text-stone-400">Pre-launch projection performed by an external system — this SaaS only integrates the results. The estimation covers this block only.</p>
